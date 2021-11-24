@@ -18,8 +18,15 @@ class Decoder(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self):
+    def __init__(self, number_of_encoders=3, number_of_decoders=3, embedding_size=10, number_of_attention_heads=8):
         super(Transformer, self).__init__()
+        self.number_of_encoders = number_of_encoders
+        self.number_of_decoders = number_of_decoders
+        self.embedding_size = embedding_size
+        self.number_of_attention_heads = number_of_attention_heads
+
+        self.stack_of_encoders = nn.ModuleList()
+        # self.stack_of_decoders = nn.ModuleList()
 
 
 if __name__ == "__main__":
