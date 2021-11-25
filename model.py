@@ -82,7 +82,7 @@ class Encoder(nn.Module):
     def __init__(self):
         super(Encoder, self).__init__()
         self.selfAttention = SelfAttention()
-        self.ff = nn.Linear()
+        self.ff = nn.Linear(1, 1)
 
     def forward(self, input):
         output = self.selfAttention(input)
@@ -97,7 +97,7 @@ class ViT(nn.Module):
         self.num_encoders = num_encoders
         self.positional_embedding = nn.Embedding(input_length + 1, patch_size * patch_size)
         self.cls_token = nn.Parameter(torch.rand(patch_size * patch_size))
-        self.convolution_embedding = nn.Conv2d(input_channels=1, output_channels=1, kernel_size=patch_size, stride=patch_size)
+        self.convolution_embedding = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=patch_size, stride=patch_size)
         self.classification_head = nn.Linear(patch_size * patch_size, num_classes, bias=False)
 
         self.stack_of_encoders = nn.ModuleList()
