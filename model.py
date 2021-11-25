@@ -1,3 +1,6 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -14,15 +17,17 @@ class SelfAttention(nn.Module):
         self.len_embedding = len_embedding
         self.num_embeddings = num_embeddings
         self.num_heads = num_heads
-        assert (len_embedding % num_heads == 0)
-        self.len_head = len_embedding // num_heads
-        data_dim = tuple((num_heads, len_embedding, self.len_head))
 
         print("num_embeddings = " + str(num_embeddings))
-        print("num_heads = " + str(num_heads))
-        print("len_embedding = " + str(len_embedding))
-        print("len_head = " + str(self.len_head))
+        print("================== num_heads = " + str(num_heads))
+        print("================== len_embedding = " + str(len_embedding))
 
+        assert (len_embedding % num_heads == 0)
+        self.len_head = len_embedding // num_heads
+        
+        print("len_head = " + str(self.len_head))
+        
+        data_dim = tuple((num_heads, len_embedding, self.len_head))
         self.WK = nn.Conv1d(
             in_channels=self.len_embedding,
             out_channels=num_heads * self.len_head,
@@ -79,9 +84,9 @@ class SelfAttention(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self):
+    def __init__(self, num_embeddings=50, len_embedding=256, num_heads=8):
         super(Encoder, self).__init__()
-        self.selfAttention = SelfAttention()
+        self.selfAttention = SelfAttention(num_embeddings, len_embedding, num_heads)
         self.ff = nn.Linear(1, 1)
 
     def forward(self, input):
@@ -92,7 +97,7 @@ class Encoder(nn.Module):
 
 
 class ViT(nn.Module):
-    def __init__(self, num_encoders=3, len_embedding=10, num_heads=8, patch_size=20, input_length=5, num_classes=10):
+    def __init__(self, num_encoders=3, len_embedding=49 * 8, num_heads=8, patch_size=4, input_length=49, num_classes=10):
         super(ViT, self).__init__()
         self.num_encoders = num_encoders
         self.positional_embedding = nn.Embedding(input_length + 1, patch_size * patch_size)
@@ -102,13 +107,13 @@ class ViT(nn.Module):
 
         self.stack_of_encoders = nn.ModuleList()
         for i in range(num_encoders):
-            self.stack_of_encoders.append(Encoder())
+            self.stack_of_encoders.append(Encoder(input_length, len_embedding, num_heads))
 
     def forward(self, x):
         y_ = self.convolution_embedding(x)
-        for encoder in self.stack_of_encoders:
-            x_ = encoder(y_)
-        y_ = self.classification_head(y_)
+        # for encoder in self.stack_of_encoders:
+        #     x_ = encoder(y_)
+        # y_ = self.classification_head(y_)
 
         return y_
 
@@ -145,5 +150,15 @@ if __name__ == "__main__":
         batch_size=1,
         num_workers=0,
         shuffle=False)
+    
+    x, y = train_dataset[0]
+    print(x.size)
+    plt.imshow(x)
+    plt.show()
+    print(y)
 
+    x = torch.tensor(np.asarray(x)).float().to(DEVICE).unsqueeze(dim=0).unsqueeze(dim=0)
+    print("input shape = " + str(x.shape))
     model = ViT().to(DEVICE)
+    y_ = model(x)
+    print("y_ shape = " + str(y_.shape))
