@@ -10,9 +10,9 @@ import torchvision
 BATCH_SIZE = 1
 
 
-class SelfAttention(nn.Module):
+class MHA(nn.Module):
     def __init__(self, num_embeddings=50, len_embedding=256, num_heads=8):
-        super(SelfAttention, self).__init__()
+        super(MHA, self).__init__()
 
         self.len_embedding = len_embedding
         self.num_embeddings = num_embeddings
@@ -86,11 +86,11 @@ class SelfAttention(nn.Module):
 class Encoder(nn.Module):
     def __init__(self, num_embeddings=50, len_embedding=256, num_heads=8):
         super(Encoder, self).__init__()
-        self.selfAttention = SelfAttention(num_embeddings, len_embedding, num_heads)
+        self.MHA = MHA(num_embeddings, len_embedding, num_heads)
         self.ff = nn.Linear(1, 1)
 
     def forward(self, input):
-        output = self.selfAttention(input)
+        output = self.MHA(input)
         output = self.ff(output)
 
         return output
@@ -131,7 +131,7 @@ if __name__ == "__main__":
     x = torch.rand(1, 256, 50).to(DEVICE)
     print(x.shape)
 
-    sa = SelfAttention().to(DEVICE)
+    sa = MHA().to(DEVICE)
     pred = sa(x)
     print("output shape = " + str(pred.shape))
 
