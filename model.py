@@ -62,9 +62,9 @@ class SelfAttention(nn.Module):
 
         Z = indexes.bmm(V)
         print("Z1 shape = " + str(Z.shape))
-        Z = Z.moveaxis(2, 1)
+        Z = Z.moveaxis(1, 0)
         print("Z2 shape = " + str(Z.shape))
-        Z = Z.flatten(start_dim=0, end_dim=1).T.unsqueeze(dim=2)
+        Z = Z.flatten(start_dim=1, end_dim=2).unsqueeze(dim=2)
         print("Z3 shape = " + str(Z.shape))
 
         output = self.WZ(Z)
