@@ -101,7 +101,7 @@ class ViT(nn.Module):
         super(ViT, self).__init__()
         self.num_encoders = num_encoders
         self.positional_embedding = nn.Embedding(input_length + 1, patch_size * patch_size)
-        self.cls_token = nn.Parameter(torch.rand(patch_size * patch_size))
+        self.cls_token = nn.Parameter(torch.rand(1, len_embedding))
         self.convolution_embedding = nn.Conv2d(in_channels=1, out_channels=len_embedding, kernel_size=patch_size, stride=patch_size)
         self.classification_head = nn.Linear(patch_size * patch_size, num_classes, bias=False)
 
@@ -111,6 +111,10 @@ class ViT(nn.Module):
 
     def forward(self, x):
         y_ = self.convolution_embedding(x)
+        y_ = y_.flatten(start_dim=2, end_dim=3).swapaxes(1, 2)
+        print("shape 1 = " + str(y_.shape))
+        print("shape 2 = " + str(self.cls_token.shape))
+        y_ = torch.cat((self.cls_token, y_.squeeze()))
         # for encoder in self.stack_of_encoders:
         #     x_ = encoder(y_)
         # y_ = self.classification_head(y_)
