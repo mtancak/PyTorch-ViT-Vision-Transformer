@@ -62,10 +62,12 @@ class SelfAttention(nn.Module):
 
         Z = indexes.bmm(V)
         print("Z1 shape = " + str(Z.shape))
-        Z = Z.moveaxis(1, 0)
+        Z = Z.moveaxis(1, 2)
         print("Z2 shape = " + str(Z.shape))
-        Z = Z.flatten(start_dim=1, end_dim=2).unsqueeze(dim=2)
+        Z = Z.flatten(start_dim=0, end_dim=1)
         print("Z3 shape = " + str(Z.shape))
+        Z = Z.unsqueeze(dim=0)
+        print("Z4 shape = " + str(Z.shape))
 
         output = self.WZ(Z)
         return output
@@ -108,7 +110,7 @@ if __name__ == "__main__":
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     print(DEVICE)
 
-    x = torch.rand(50, 256, 1).to(DEVICE)
+    x = torch.rand(1, 256, 50).to(DEVICE)
     print(x.shape)
 
     sa = SelfAttention().to(DEVICE)
