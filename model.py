@@ -87,10 +87,12 @@ class Encoder(nn.Module):
 
 
 class ViT(nn.Module):
-    def __init__(self, num_encoders=3, num_decoders=3, len_embedding=10, num_heads=8):
+    def __init__(self, num_encoders=3, len_embedding=10, num_heads=8, patch_size=20, input_length=5):
         super(ViT, self).__init__()
         self.num_encoders = num_encoders
-        self.convolution_embedding = nn.Conv2d(input_channels=0, output_channels=0, kernel_size=0, stride=0)
+        self.positional_embedding = nn.Embedding(input_length + 1, patch_size * patch_size)
+        self.cls_token = nn.Parameter(torch.rand(patch_size * patch_size))
+        self.convolution_embedding = nn.Conv2d(input_channels=1, output_channels=1, kernel_size=patch_size, stride=patch_size)
         self.classification_head = nn.Linear()
 
         self.stack_of_encoders = nn.ModuleList()
