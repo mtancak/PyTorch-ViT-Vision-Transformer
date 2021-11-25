@@ -1,5 +1,10 @@
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader
+import torchvision
+
+
+BATCH_SIZE = 1
 
 
 class SelfAttention(nn.Module):
@@ -118,3 +123,27 @@ if __name__ == "__main__":
     sa = SelfAttention().to(DEVICE)
     pred = sa(x)
     print("output shape = " + str(pred.shape))
+
+    train_dataset = torchvision.datasets.MNIST(
+        'C:/Users/Milan/Documents/Fast_Datasets/MNIST/',
+        train=True,
+        download=True)
+
+    validation_dataset = torchvision.datasets.MNIST(
+        'C:/Users/Milan/Documents/Fast_Datasets/MNIST/',
+        train=False,
+        download=True)
+
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=BATCH_SIZE,
+        num_workers=0,
+        shuffle=True)
+
+    validation_loader = DataLoader(
+        validation_dataset,
+        batch_size=1,
+        num_workers=0,
+        shuffle=False)
+
+    model = ViT().to(DEVICE)
