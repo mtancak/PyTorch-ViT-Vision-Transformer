@@ -74,18 +74,34 @@ class SelfAttention(nn.Module):
 class Encoder(nn.Module):
     def __init__(self):
         super(Encoder, self).__init__()
+        self.selfAttention = SelfAttention()
+        self.ff = nn.Linear()
+
+    def forward(self, input):
+        output = self.selfAttention(input)
+        output = self.ff(output)
+
+        return output
 
 
 class ViT(nn.Module):
     def __init__(self, num_encoders=3, num_decoders=3, len_embedding=10, num_heads=8):
         super(ViT, self).__init__()
         self.num_encoders = num_encoders
-        self.num_decoders = num_decoders
-        self.len_embedding = len_embedding
-        self.num_heads = num_heads
+        self.convolution_embedding = nn.Conv2d(input_channels=0, output_channels=0, kernel_size=0, stride=0)
+        self.classification_head = nn.Linear()
 
         self.stack_of_encoders = nn.ModuleList()
-        # self.stack_of_decoders = nn.ModuleList()
+        for i in range(num_encoders):
+            self.stack_of_encoders.append(Encoder())
+
+    def forward(self, x):
+        y_ = self.convolution_embedding(x)
+        for encoder in self.stack_of_encoders:
+            x_ = encoder(y_)
+        y_ = self.classification_head(y_)
+
+        return y_
 
 
 if __name__ == "__main__":
