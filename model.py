@@ -7,6 +7,7 @@ from torch.utils.data import DataLoader
 import torchvision
 
 
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 1
 
 
@@ -86,12 +87,18 @@ class MHA(nn.Module):
 class Encoder(nn.Module):
     def __init__(self, num_embeddings=50, len_embedding=256, num_heads=8):
         super(Encoder, self).__init__()
+        self.num_embeddings = num_embeddings
+        self.len_embedding = len_embedding
         self.MHA = MHA(num_embeddings, len_embedding, num_heads)
         self.ff = nn.Linear(1, 1)
 
     def forward(self, input):
-        output = self.MHA(input)
-        output = self.ff(output)
+        print("encoder forward")
+        print("input shape = " + str(input.shape))
+        output = nn.BatchNorm1d(self.len_embedding, device=DEVICE)(input)
+        print("output shape = " + str(output.shape))
+        # output = self.MHA(input)
+        # output = self.ff(output)
 
         return output
 
@@ -117,15 +124,14 @@ class ViT(nn.Module):
         y_ = torch.cat((self.cls_token, y_.squeeze()))
         for e in range(len(y_)):
             y_[e] = y_[e] + self.positional_embedding.weight[e]
-        # for encoder in self.stack_of_encoders:
-        #     x_ = encoder(y_)
+        for encoder in self.stack_of_encoders:
+            y_ = encoder(y_)
         # y_ = self.classification_head(y_)
 
         return y_
 
 
 if __name__ == "__main__":
-    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     print(DEVICE)
 
     x = torch.rand(1, 256, 50).to(DEVICE)
