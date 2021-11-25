@@ -18,32 +18,32 @@ class SelfAttention(nn.Module):
         print("len_embedding = " + str(len_embedding))
         print("len_head = " + str(self.len_head))
 
-        self.WK = nn.Conv2d(
+        self.WK = nn.Conv1d(
             in_channels=num_embeddings,
             out_channels=num_heads * num_embeddings,
-            kernel_size=(1, 1)
+            kernel_size=(1)
         )
-        self.WQ = nn.Conv2d(
+        self.WQ = nn.Conv1d(
             in_channels=num_embeddings,
             out_channels=num_heads * num_embeddings,
-            kernel_size=(1, 1)
+            kernel_size=(1)
         )
-        self.WV = nn.Conv2d(
+        self.WV = nn.Conv1d(
             in_channels=num_embeddings,
             out_channels=num_heads * num_embeddings,
-            kernel_size=(1, 1)
+            kernel_size=(1)
         )
 
-        self.WZ = nn.Conv2d(
+        self.WZ = nn.Conv1d(
             in_channels=num_heads * num_embeddings,
             out_channels=num_embeddings,
-            kernel_size=(1, 1)
+            kernel_size=(1)
         )
 
     def forward(self, embeddings):
-        K = self.WK(embeddings).reshape(self.num_heads, self.num_embeddings, 1, self.len_embedding).squeeze()
-        Q = self.WQ(embeddings).reshape(self.num_heads, self.num_embeddings, 1, self.len_embedding).squeeze()
-        V = self.WV(embeddings).reshape(self.num_heads, self.num_embeddings, 1, self.len_embedding).squeeze()
+        K = self.WK(embeddings).reshape(self.num_heads, self.num_embeddings, self.len_embedding).squeeze()
+        Q = self.WQ(embeddings).reshape(self.num_heads, self.num_embeddings, self.len_embedding).squeeze()
+        V = self.WV(embeddings).reshape(self.num_heads, self.num_embeddings, self.len_embedding).squeeze()
 
         print("k shape = " + str(K.shape))
         print("q shape = " + str(Q.shape))
@@ -56,7 +56,7 @@ class SelfAttention(nn.Module):
         indexes = torch.softmax(score / self.len_head, dim=2)
         print("indexes shape = " + str(indexes.shape))
 
-        Z = indexes.bmm(V).reshape(1, 400, 1, 256)
+        Z = indexes.bmm(V).reshape(1, 400, 256)
         print("Z shape = " + str(Z.shape))
 
         output = self.WZ(Z)
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     print(DEVICE)
 
-    x = torch.rand(1, 50, 1, 256).to(DEVICE)
+    x = torch.rand(1, 50, 256).to(DEVICE)
     print(x.shape)
 
     sa = SelfAttention().to(DEVICE)
