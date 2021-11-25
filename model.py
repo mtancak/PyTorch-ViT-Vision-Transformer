@@ -102,7 +102,7 @@ class ViT(nn.Module):
         self.num_encoders = num_encoders
         self.positional_embedding = nn.Embedding(input_length + 1, patch_size * patch_size)
         self.cls_token = nn.Parameter(torch.rand(patch_size * patch_size))
-        self.convolution_embedding = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=patch_size, stride=patch_size)
+        self.convolution_embedding = nn.Conv2d(in_channels=1, out_channels=len_embedding, kernel_size=patch_size, stride=patch_size)
         self.classification_head = nn.Linear(patch_size * patch_size, num_classes, bias=False)
 
         self.stack_of_encoders = nn.ModuleList()
