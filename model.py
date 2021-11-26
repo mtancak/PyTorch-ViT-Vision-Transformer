@@ -141,7 +141,9 @@ class ViT(nn.Module):
         
         for encoder in self.stack_of_encoders:
             y_ = encoder(y_)
-        y_ = self.classification_head(y_)
+            
+        print("y_shape = " + str(y_.shape))
+        y_ = self.classification_head(y_[:, 0, :])
 
         return y_
 
