@@ -52,6 +52,7 @@ class MHA(nn.Module):
         )
 
     def forward(self, input):
+        print("mha forward")
         print("input shape = " + str(input.shape))
         K = self.WK(input)
         print("K1 shape = " + str(K.shape))
@@ -97,7 +98,7 @@ class Encoder(nn.Module):
         print("input shape = " + str(input.shape))
         output = nn.BatchNorm1d(self.len_embedding, device=DEVICE)(input)
         print("output shape = " + str(output.shape))
-        # output = self.MHA(input)
+        output = self.MHA(input)
         # output = self.ff(output)
 
         return output
@@ -114,7 +115,7 @@ class ViT(nn.Module):
 
         self.stack_of_encoders = nn.ModuleList()
         for i in range(num_encoders):
-            self.stack_of_encoders.append(Encoder(input_length, len_embedding, num_heads))
+            self.stack_of_encoders.append(Encoder(input_length + 1, len_embedding, num_heads))
 
     def forward(self, x):
         y_ = self.convolution_embedding(x)
@@ -124,6 +125,10 @@ class ViT(nn.Module):
         y_ = torch.cat((self.cls_token, y_.squeeze()))
         for e in range(len(y_)):
             y_[e] = y_[e] + self.positional_embedding.weight[e]
+        
+        y_ = y_.T.unsqueeze(dim=0)
+        print("shape 3 = " + str(y_.shape))
+        
         for encoder in self.stack_of_encoders:
             y_ = encoder(y_)
         # y_ = self.classification_head(y_)
