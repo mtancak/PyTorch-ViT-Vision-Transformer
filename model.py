@@ -103,9 +103,10 @@ class Encoder(nn.Module):
         print("input shape = " + str(input.shape))
         output = nn.BatchNorm1d(self.num_embeddings, device=DEVICE)(input)
         print("BatchNorm1d output shape = " + str(output.shape))
-        output = self.MHA(input)
+        skip = self.MHA(input) + input
+        output = nn.BatchNorm1d(self.num_embeddings, device=DEVICE)(skip)
         print("ff input shape1 = " + str(output.shape))
-        output = self.ff(output)
+        output = self.ff(output) + skip
         print("ff input shape2 = " + str(output.shape))
 
         return output
