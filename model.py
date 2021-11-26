@@ -91,7 +91,7 @@ class Encoder(nn.Module):
         self.num_embeddings = num_embeddings
         self.len_embedding = len_embedding
         self.MHA = MHA(num_embeddings, len_embedding, num_heads)
-        self.ff = nn.Linear(1, 1)
+        self.ff = nn.Linear(num_embeddings, num_embeddings)
 
     def forward(self, input):
         print("encoder forward")
@@ -99,7 +99,7 @@ class Encoder(nn.Module):
         output = nn.BatchNorm1d(self.len_embedding, device=DEVICE)(input)
         print("output shape = " + str(output.shape))
         output = self.MHA(input)
-        # output = self.ff(output)
+        output = self.ff(output)
 
         return output
 
