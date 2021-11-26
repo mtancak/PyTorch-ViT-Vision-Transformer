@@ -53,7 +53,9 @@ class MHA(nn.Module):
 
     def forward(self, input):
         print("mha forward")
-        print("input shape = " + str(input.shape))
+        print("input shape1 = " + str(input.shape))
+        input = input.swapaxes(1, 2)
+        print("input shape2 = " + str(input.shape))
         K = self.WK(input)
         print("K1 shape = " + str(K.shape))
         K = K.T.reshape(self.num_heads, self.num_embeddings, self.len_head).squeeze()
@@ -82,6 +84,9 @@ class MHA(nn.Module):
         print("Z4 shape = " + str(Z.shape))
 
         output = self.WZ(Z)
+        print("output shape3 = " + str(output.shape))
+        output = output.swapaxes(1, 2)
+        print("output shape4 = " + str(output.shape))
         return output
 
 
@@ -91,15 +96,17 @@ class Encoder(nn.Module):
         self.num_embeddings = num_embeddings
         self.len_embedding = len_embedding
         self.MHA = MHA(num_embeddings, len_embedding, num_heads)
-        self.ff = nn.Linear(num_embeddings, num_embeddings)
+        self.ff = nn.Linear(len_embedding, len_embedding)
 
     def forward(self, input):
         print("encoder forward")
         print("input shape = " + str(input.shape))
-        output = nn.BatchNorm1d(self.len_embedding, device=DEVICE)(input)
-        print("output shape = " + str(output.shape))
+        output = nn.BatchNorm1d(self.num_embeddings, device=DEVICE)(input)
+        print("BatchNorm1d output shape = " + str(output.shape))
         output = self.MHA(input)
+        print("ff input shape1 = " + str(output.shape))
         output = self.ff(output)
+        print("ff input shape2 = " + str(output.shape))
 
         return output
 
@@ -111,7 +118,7 @@ class ViT(nn.Module):
         self.positional_embedding = nn.Embedding(input_length + 1, len_embedding)
         self.cls_token = nn.Parameter(torch.rand(1, len_embedding))
         self.convolution_embedding = nn.Conv2d(in_channels=1, out_channels=len_embedding, kernel_size=patch_size, stride=patch_size)
-        self.classification_head = nn.Linear(patch_size * patch_size, num_classes, bias=False)
+        self.classification_head = nn.Linear(len_embedding, num_classes, bias=False)
 
         self.stack_of_encoders = nn.ModuleList()
         for i in range(num_encoders):
@@ -128,10 +135,12 @@ class ViT(nn.Module):
         
         y_ = y_.T.unsqueeze(dim=0)
         print("shape 3 = " + str(y_.shape))
+        y_ = y_.swapaxes(1, 2)
+        print("shape 4 = " + str(y_.shape))
         
         for encoder in self.stack_of_encoders:
             y_ = encoder(y_)
-        # y_ = self.classification_head(y_)
+        y_ = self.classification_head(y_)
 
         return y_
 
@@ -139,12 +148,12 @@ class ViT(nn.Module):
 if __name__ == "__main__":
     print(DEVICE)
 
-    x = torch.rand(1, 256, 50).to(DEVICE)
-    print(x.shape)
+    # x = torch.rand(1, 256, 50).to(DEVICE)
+    # print(x.shape)
 
-    sa = MHA().to(DEVICE)
-    pred = sa(x)
-    print("output shape = " + str(pred.shape))
+    # sa = MHA().to(DEVICE)
+    # pred = sa(x)
+    # print("output shape = " + str(pred.shape))
 
     train_dataset = torchvision.datasets.MNIST(
         'C:/Users/Milan/Documents/Fast_Datasets/MNIST/',
