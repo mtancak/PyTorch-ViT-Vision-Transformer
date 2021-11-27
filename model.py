@@ -1,14 +1,18 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 import torch
 import torch.nn as nn
+import torch.optim as optim
 from torch.utils.data import DataLoader
 import torchvision
 
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 1
+NUMBER_OF_EPOCHS = 20
+SAVE_MODEL_LOC = "./model_"
 
 
 class MHA(nn.Module):
@@ -19,16 +23,9 @@ class MHA(nn.Module):
         self.num_embeddings = num_embeddings
         self.num_heads = num_heads
 
-        print("num_embeddings = " + str(num_embeddings))
-        print("================== num_heads = " + str(num_heads))
-        print("================== len_embedding = " + str(len_embedding))
-
         assert (len_embedding % num_heads == 0)
         self.len_head = len_embedding // num_heads
-        
-        print("len_head = " + str(self.len_head))
-        
-        data_dim = tuple((num_heads, len_embedding, self.len_head))
+
         self.WK = nn.Conv1d(
             in_channels=self.len_embedding,
             out_channels=num_heads * self.len_head,
@@ -52,41 +49,23 @@ class MHA(nn.Module):
         )
 
     def forward(self, input):
-        print("mha forward")
-        print("input shape1 = " + str(input.shape))
         input = input.swapaxes(1, 2)
-        print("input shape2 = " + str(input.shape))
         K = self.WK(input)
-        print("K1 shape = " + str(K.shape))
         K = K.T.reshape(self.num_heads, self.num_embeddings, self.len_head).squeeze()
-        print("K2 shape = " + str(K.shape))
         Q = self.WQ(input).reshape(self.num_heads, self.num_embeddings, self.len_head).squeeze()
         V = self.WV(input).reshape(self.num_heads, self.num_embeddings, self.len_head).squeeze()
 
-        print("k shape = " + str(K.shape))
-        print("q shape = " + str(Q.shape))
-        print("v shape = " + str(V.shape))
-
         score = Q.bmm(K.transpose(dim0=1, dim1=2))
-        print("score shape = " + str(score.shape))
-        print("len_head = " + str(self.len_head))
 
         indexes = torch.softmax(score / self.len_head, dim=2)
-        print("indexes shape = " + str(indexes.shape))
 
         Z = indexes.bmm(V)
-        print("Z1 shape = " + str(Z.shape))
         Z = Z.moveaxis(1, 2)
-        print("Z2 shape = " + str(Z.shape))
         Z = Z.flatten(start_dim=0, end_dim=1)
-        print("Z3 shape = " + str(Z.shape))
         Z = Z.unsqueeze(dim=0)
-        print("Z4 shape = " + str(Z.shape))
 
         output = self.WZ(Z)
-        print("output shape3 = " + str(output.shape))
         output = output.swapaxes(1, 2)
-        print("output shape4 = " + str(output.shape))
         return output
 
 
@@ -99,21 +78,16 @@ class Encoder(nn.Module):
         self.ff = nn.Linear(len_embedding, len_embedding)
 
     def forward(self, input):
-        print("encoder forward")
-        print("input shape = " + str(input.shape))
         output = nn.BatchNorm1d(self.num_embeddings, device=DEVICE)(input)
-        print("BatchNorm1d output shape = " + str(output.shape))
         skip = self.MHA(input) + input
         output = nn.BatchNorm1d(self.num_embeddings, device=DEVICE)(skip)
-        print("ff input shape1 = " + str(output.shape))
         output = self.ff(output) + skip
-        print("ff input shape2 = " + str(output.shape))
 
         return output
 
 
 class ViT(nn.Module):
-    def __init__(self, num_encoders=3, len_embedding=49 * 8, num_heads=8, patch_size=4, input_length=49, num_classes=10):
+    def __init__(self, num_encoders=8, len_embedding=49 * 12, num_heads=12, patch_size=4, input_length=49, num_classes=10):
         super(ViT, self).__init__()
         self.num_encoders = num_encoders
         self.positional_embedding = nn.Embedding(input_length + 1, len_embedding)
@@ -128,45 +102,86 @@ class ViT(nn.Module):
     def forward(self, x):
         y_ = self.convolution_embedding(x)
         y_ = y_.flatten(start_dim=2, end_dim=3).swapaxes(1, 2)
-        print("shape 1 = " + str(y_.shape))
-        print("shape 2 = " + str(self.cls_token.shape))
         y_ = torch.cat((self.cls_token, y_.squeeze()))
         for e in range(len(y_)):
             y_[e] = y_[e] + self.positional_embedding.weight[e]
         
         y_ = y_.T.unsqueeze(dim=0)
-        print("shape 3 = " + str(y_.shape))
         y_ = y_.swapaxes(1, 2)
-        print("shape 4 = " + str(y_.shape))
         
         for encoder in self.stack_of_encoders:
             y_ = encoder(y_)
-            
-        print("y_shape = " + str(y_.shape))
+
         y_ = self.classification_head(y_[:, 0, :])
+        y_ = nn.Softmax(dim=1)(y_)
 
         return y_
+
+
+# measures accuracy of predictions at the end of an epoch (bad for semantic segmentation)
+def accuracy(model, loader):
+    correct = 0
+    total = len(loader)
+
+    with torch.no_grad():
+        for data, label in loader:
+            pred = model(data.to(DEVICE))
+            pred = torch.argmax(pred, dim=1)
+
+            correct += (pred == label.to(DEVICE))
+            total += torch.numel(pred)
+
+    return correct / total
+
+
+# a training loop that runs a number of training epochs on a model
+def train(model, loss_function, optimizer, train_loader, validation_loader):
+    for epoch in range(NUMBER_OF_EPOCHS):
+        model.train()
+        progress = tqdm(train_loader)
+
+        for batch, (data, seg) in enumerate(progress):
+            pred = model(data.to(DEVICE))
+            loss = loss_function(pred, seg.to(DEVICE))
+
+            # make the progress bar display loss
+            progress.set_postfix(loss=loss.item())
+
+            # back propagation
+            optimizer.zero_grad()  # zeros out the gradients from previous batch
+            loss.backward()
+            optimizer.step()
+
+        model.eval()
+
+        print("Test Accuracy for epoch (" + str(epoch) + ") is: " + str(accuracy(model, validation_loader)))
+        print("Train Accuracy for epoch (" + str(epoch) + ") is: " + str(accuracy(model, train_loader)))
+
+        torch.save(model.state_dict(), SAVE_MODEL_LOC + str(epoch))
 
 
 if __name__ == "__main__":
     print(DEVICE)
 
-    # x = torch.rand(1, 256, 50).to(DEVICE)
-    # print(x.shape)
-
-    # sa = MHA().to(DEVICE)
-    # pred = sa(x)
-    # print("output shape = " + str(pred.shape))
-
     train_dataset = torchvision.datasets.MNIST(
         'C:/Users/Milan/Documents/Fast_Datasets/MNIST/',
         train=True,
-        download=True)
+        download=True,
+        transform=torchvision.transforms.Compose([
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.Normalize(
+                (0.1307,), (0.3081,))
+        ]))
 
     validation_dataset = torchvision.datasets.MNIST(
         'C:/Users/Milan/Documents/Fast_Datasets/MNIST/',
         train=False,
-        download=True)
+        download=True,
+        transform=torchvision.transforms.Compose([
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.Normalize(
+                (0.1307,), (0.3081,))
+        ]))
 
     train_loader = DataLoader(
         train_dataset,
@@ -180,14 +195,39 @@ if __name__ == "__main__":
         num_workers=0,
         shuffle=False)
     
-    x, y = train_dataset[0]
-    print(x.size)
-    plt.imshow(x)
-    plt.show()
-    print(y)
+    # x, y = train_dataset[0]
+    # # print(x.size)
+    # plt.imshow(x)
+    # plt.show()
+    # # print(y)
 
-    x = torch.tensor(np.asarray(x)).float().to(DEVICE).unsqueeze(dim=0).unsqueeze(dim=0)
-    print("input shape = " + str(x.shape))
+    '''x, y = train_dataset[0]
+    x = torch.tensor(np.asarray(x)).float().to(DEVICE).unsqueeze(dim=0)
+    y = torch.tensor(np.asarray(y)).float().to(DEVICE)
+    print("y = " + str(y))
+
     model = ViT().to(DEVICE)
-    y_ = model(x)
-    print("y_ shape = " + str(y_.shape))
+    loss_function = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.0001)
+
+    print("init y_ = " + str(model(x)))
+
+    for i in range(20):
+        pred = model(x)
+        loss = loss_function(pred, y.long().unsqueeze(0))
+        print("i = " + str(i) + ", loss = " + str(loss))
+
+        optimizer.zero_grad()  # zeros out the gradients from previous batch
+        loss.backward()
+        optimizer.step()
+
+    pred = model(x)
+    print("final y_ = " + str(pred))
+    loss = loss_function(pred, y.long().unsqueeze(0))
+    print("final, loss = " + str(loss))'''
+
+    model = ViT().to(DEVICE)
+    loss_function = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.00005)
+
+    train(model, loss_function, optimizer, train_loader, validation_loader)
