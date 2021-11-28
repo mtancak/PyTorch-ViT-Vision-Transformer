@@ -11,8 +11,8 @@ import torchvision
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 1
-NUMBER_OF_EPOCHS = 20
-BATCHES_PER_EPOCH = 10
+NUMBER_OF_EPOCHS = 50
+BATCHES_PER_EPOCH = 1000
 LOAD_MODEL_LOC = None
 SAVE_MODEL_LOC = "./model_"
 PRINT = True
