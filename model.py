@@ -210,7 +210,8 @@ def train(model, loss_function, optimizer, train_loader, validation_loader):
             plt.title("Graph of accuracy over time")
             plt.xlabel("epoch #")
             plt.ylabel("accuracy %")
-            plt.xticks(range(0, epoch + 1))
+            if epoch < 20:
+                plt.xticks(range(0, epoch + 1))
             plt.ylim(0, 100)
             plt.show()
 
