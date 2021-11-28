@@ -15,6 +15,8 @@ NUMBER_OF_EPOCHS = 20
 BATCHES_PER_EPOCH = 100
 LOAD_MODEL_LOC = None
 SAVE_MODEL_LOC = "./model_"
+PRINT = True
+PRINT_GRAPH = True
 
 
 class MHA(nn.Module):
@@ -97,8 +99,15 @@ class ViT(nn.Module):
         self.num_encoders = num_encoders
         self.positional_embedding = nn.Embedding(patches_per_dim + 1, len_embedding)
         self.cls_token = nn.Parameter(torch.rand(1, len_embedding))
-        self.convolution_embedding = nn.Conv2d(in_channels=1, out_channels=len_embedding, kernel_size=patch_size, stride=patch_size)
-        self.classification_head = nn.Linear(len_embedding, num_classes, bias=False)
+        self.convolution_embedding = nn.Conv2d(
+            in_channels=1,
+            out_channels=len_embedding,
+            kernel_size=patch_size,
+            stride=patch_size)
+        self.classification_head = nn.Linear(
+            in_features=len_embedding,
+            out_features=num_classes,
+            bias=False)
 
         self.stack_of_encoders = nn.ModuleList()
         for i in range(num_encoders):
@@ -135,11 +144,14 @@ def accuracy(model, loader):
             correct += (y_ == y.to(DEVICE))
             i += 1
 
-    return (correct / BATCHES_PER_EPOCH).item()
+    return (correct / BATCHES_PER_EPOCH).item() * 100
 
 
 # a training loop that runs a number of training epochs on a model
 def train(model, loss_function, optimizer, train_loader, validation_loader):
+    accuracy_per_epoch_train = []
+    accuracy_per_epoch_val = []
+
     for epoch in range(NUMBER_OF_EPOCHS):
         model.train()
         progress = tqdm(train_loader)
@@ -161,11 +173,29 @@ def train(model, loss_function, optimizer, train_loader, validation_loader):
 
         model.eval()
 
-        print("Test Accuracy for epoch (" + str(epoch) + ") is: " + str(accuracy(model, validation_loader)))
-        print("Train Accuracy for epoch (" + str(epoch) + ") is: " + str(accuracy(model, train_loader)))
+        accuracy_per_epoch_train.append(accuracy(model, train_loader))
+        accuracy_per_epoch_val.append(accuracy(model, validation_loader))
 
         if SAVE_MODEL_LOC:
             torch.save(model.state_dict(), SAVE_MODEL_LOC + str(epoch))
+
+        if PRINT:
+            print("Test Accuracy for epoch (" + str(epoch) + ") is: " + str(accuracy_per_epoch_val[-1]))
+            print("Train Accuracy for epoch (" + str(epoch) + ") is: " + str(accuracy_per_epoch_train[-1]))
+
+        if PRINT_GRAPH:
+            plt.figure(figsize=(10, 10), dpi=100)
+            plt.plot(range(0, epoch + 1), accuracy_per_epoch_train,
+                     color='b', marker='o', linestyle='dashed', label='Training')
+            plt.plot(range(0, epoch + 1), accuracy_per_epoch_val,
+                     color='r', marker='o', linestyle='dashed', label='Validation')
+            plt.legend()
+            plt.title("Graph of accuracy over time")
+            plt.xlabel("epoch #")
+            plt.ylabel("accuracy %")
+            plt.xticks(range(0, epoch + 1))
+            plt.ylim(0, 100)
+            plt.show()
 
 
 if __name__ == "__main__":
