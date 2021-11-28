@@ -9,17 +9,6 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 import torchvision
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-BATCH_SIZE = 1
-NUMBER_OF_EPOCHS = 50
-BATCHES_PER_EPOCH = 1000
-LOAD_MODEL_LOC = None
-SAVE_MODEL_LOC = "./model_"
-PRINT = True
-PRINT_GRAPH = True
-PRINT_CM = True
-
-
 class MHA(nn.Module):
     def __init__(self, num_embeddings=50, len_embedding=256, num_heads=8):
         super(MHA, self).__init__()
@@ -52,18 +41,17 @@ class MHA(nn.Module):
             out_channels=len_embedding,
             kernel_size=1
         )
-
-    def forward(self, input):
-        input = input.swapaxes(1, 2)
-        K = self.WK(input)
-        K = K.T.reshape(self.num_heads, self.num_embeddings, self.len_head).squeeze()
-        Q = self.WQ(input).reshape(self.num_heads, self.num_embeddings, self.len_head).squeeze()
-        V = self.WV(input).reshape(self.num_heads, self.num_embeddings, self.len_head).squeeze()
+        
+    def forward(self, inp):
+        inp = inp.swapaxes(1, 2)
+        K = self.WK(inp).T.reshape(self.num_heads, self.num_embeddings, self.len_head).squeeze()
+        Q = self.WQ(inp).reshape(self.num_heads, self.num_embeddings, self.len_head).squeeze()
+        V = self.WV(inp).reshape(self.num_heads, self.num_embeddings, self.len_head).squeeze()
 
         score = Q.bmm(K.transpose(dim0=1, dim1=2))
 
         indexes = torch.softmax(score / self.len_head, dim=2)
-
+        
         Z = indexes.bmm(V)
         Z = Z.moveaxis(1, 2)
         Z = Z.flatten(start_dim=0, end_dim=1)
@@ -75,24 +63,26 @@ class MHA(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, num_embeddings=50, len_embedding=256, num_heads=8):
+    def __init__(self, num_embeddings=50, len_embedding=256, num_heads=8, device="cpu"):
         super(Encoder, self).__init__()
         self.num_embeddings = num_embeddings
         self.len_embedding = len_embedding
         self.MHA = MHA(num_embeddings, len_embedding, num_heads)
         self.ff = nn.Linear(len_embedding, len_embedding)
+        
+        self.device = device
 
-    def forward(self, input):
-        output = nn.BatchNorm1d(self.num_embeddings, device=DEVICE)(input)
-        skip = self.MHA(input) + output
-        output = nn.BatchNorm1d(self.num_embeddings, device=DEVICE)(skip)
+    def forward(self, inp):
+        output = nn.BatchNorm1d(self.num_embeddings, device=self.device)(inp)
+        skip = self.MHA(inp) + output
+        output = nn.BatchNorm1d(self.num_embeddings, device=self.device)(skip)
         output = self.ff(output) + skip
 
         return output
 
 
 class ViT(nn.Module):
-    def __init__(self, num_encoders=5, len_embedding=128, num_heads=8, patch_size=4, input_res=28, num_classes=10):
+    def __init__(self, num_encoders=5, len_embedding=128, num_heads=8, patch_size=4, input_res=28, num_classes=10, device="cpu"):
         super(ViT, self).__init__()
 
         patches_per_dim = (input_res // patch_size) * (input_res // patch_size)
@@ -112,155 +102,28 @@ class ViT(nn.Module):
 
         self.stack_of_encoders = nn.ModuleList()
         for i in range(num_encoders):
-            self.stack_of_encoders.append(Encoder(patches_per_dim + 1, len_embedding, num_heads))
+            self.stack_of_encoders.append(Encoder(patches_per_dim + 1, len_embedding, num_heads, device))
 
     def forward(self, x):
-        y_ = self.convolution_embedding(x)
-        y_ = y_.flatten(start_dim=2, end_dim=3).swapaxes(1, 2)
-        y_ = torch.cat((self.cls_token, y_.squeeze()))
-        for e in range(len(y_)):
-            y_[e] = y_[e] + self.positional_embedding.weight[e]
+        z = self.convolution_embedding(x)
+        z = z.flatten(start_dim=2, end_dim=3).swapaxes(1, 2)
+        z = torch.cat((self.cls_token, z.squeeze()))
+        for e in range(len(z)):
+            z[e] = z[e] + self.positional_embedding.weight[e]
 
-        y_ = y_.T.unsqueeze(dim=0)
-        y_ = y_.swapaxes(1, 2)
+        z = z.T.unsqueeze(dim=0)
+        z = z.swapaxes(1, 2)
 
         for encoder in self.stack_of_encoders:
-            y_ = encoder(y_)
+            z = encoder(z)
 
-        y_ = self.classification_head(y_[:, 0, :])
+        z = z[:, 0, :]
+
+        y_ = self.classification_head(z)
         return y_
 
 
-# measures accuracy of predictions at the end of an epoch (bad for semantic segmentation)
-def accuracy(model, loader, num_classes=10):
-    correct = 0
-    cm = np.zeros((num_classes, num_classes))
-
-    with torch.no_grad():
-        for i, (x, y) in enumerate(loader):
-            if i > BATCHES_PER_EPOCH:
-                break
-            y_ = model(x.to(DEVICE))
-            y_ = torch.argmax(y_, dim=1)
-
-            correct += (y_ == y.to(DEVICE))
-            cm[y][y_] += 1
-
-    if PRINT_CM:
-        print(cm)
-        class_labels = list(range(num_classes))
-        ax = sn.heatmap(
-            cm,
-            annot=True,
-            cbar=False,
-            xticklabels=class_labels,
-            yticklabels=class_labels)
-        ax.set(
-            xlabel="prediction",
-            ylabel="truth",
-            title="Confusion Matrix for " + ("Training set" if loader.dataset.train else "Validation dataset"))
-        plt.show()
-
-    return (correct / BATCHES_PER_EPOCH).item() * 100
-
-
-# a training loop that runs a number of training epochs on a model
-def train(model, loss_function, optimizer, train_loader, validation_loader):
-    accuracy_per_epoch_train = []
-    accuracy_per_epoch_val = []
-
-    for epoch in range(NUMBER_OF_EPOCHS):
-        model.train()
-        progress = tqdm(train_loader)
-
-        for i, (x, y) in enumerate(progress):
-            if i > BATCHES_PER_EPOCH:
-                break
-
-            y_ = model(x.to(DEVICE))
-            loss = loss_function(y_, y.to(DEVICE))
-
-            # make the progress bar display loss
-            progress.set_postfix(loss=loss.item())
-
-            # back propagation
-            optimizer.zero_grad()  # zeros out the gradients from previous batch
-            loss.backward()
-            optimizer.step()
-
-        model.eval()
-
-        accuracy_per_epoch_train.append(accuracy(model, train_loader))
-        accuracy_per_epoch_val.append(accuracy(model, validation_loader))
-
-        if SAVE_MODEL_LOC:
-            torch.save(model.state_dict(), SAVE_MODEL_LOC + str(epoch))
-
-        if PRINT:
-            print("Test Accuracy for epoch (" + str(epoch) + ") is: " + str(accuracy_per_epoch_val[-1]))
-            print("Train Accuracy for epoch (" + str(epoch) + ") is: " + str(accuracy_per_epoch_train[-1]))
-
-        if PRINT_GRAPH:
-            plt.figure(figsize=(10, 10), dpi=100)
-            plt.plot(range(0, epoch + 1), accuracy_per_epoch_train,
-                     color='b', marker='o', linestyle='dashed', label='Training')
-            plt.plot(range(0, epoch + 1), accuracy_per_epoch_val,
-                     color='r', marker='o', linestyle='dashed', label='Validation')
-            plt.legend()
-            plt.title("Graph of accuracy over time")
-            plt.xlabel("epoch #")
-            plt.ylabel("accuracy %")
-            if epoch < 20:
-                plt.xticks(range(0, epoch + 1))
-            plt.ylim(0, 100)
-            plt.show()
-
-
 if __name__ == "__main__":
-    print(DEVICE)
-
-    train_dataset = torchvision.datasets.MNIST(
-        'C:/Users/Milan/Documents/Fast_Datasets/MNIST/',
-        train=True,
-        download=True,
-        transform=torchvision.transforms.Compose([
-            torchvision.transforms.ToTensor(),
-            torchvision.transforms.Normalize(
-                (0.1307,), (0.3081,))
-        ]))
-
-    validation_dataset = torchvision.datasets.MNIST(
-        'C:/Users/Milan/Documents/Fast_Datasets/MNIST/',
-        train=False,
-        download=True,
-        transform=torchvision.transforms.Compose([
-            torchvision.transforms.ToTensor(),
-            torchvision.transforms.Normalize(
-                (0.1307,), (0.3081,))
-        ]))
-
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=BATCH_SIZE,
-        num_workers=0,
-        shuffle=True)
-
-    validation_loader = DataLoader(
-        validation_dataset,
-        batch_size=1,
-        num_workers=0,
-        shuffle=False)
-
-    # x, y = train_dataset[0]
-    # # print(x.size)
-    # plt.imshow(x)
-    # plt.show()
-    # print(y)
-
-    model = ViT().to(DEVICE)
-    if LOAD_MODEL_LOC:
-        model.load_state_dict(torch.load(LOAD_MODEL_LOC))
-
-    loss_function = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.0001)
-    train(model, loss_function, optimizer, train_loader, validation_loader)
+    
+    model = ViT()
+    model(torch.rand((1, 1, 28, 28)))
