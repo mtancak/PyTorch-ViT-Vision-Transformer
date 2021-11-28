@@ -12,6 +12,7 @@ import torchvision
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 1
 NUMBER_OF_EPOCHS = 20
+BATCHES_PER_EPOCH = 100
 SAVE_MODEL_LOC = "./model_"
 
 
@@ -79,7 +80,7 @@ class Encoder(nn.Module):
 
     def forward(self, input):
         output = nn.BatchNorm1d(self.num_embeddings, device=DEVICE)(input)
-        skip = self.MHA(input) + input
+        skip = self.MHA(input) + output
         output = nn.BatchNorm1d(self.num_embeddings, device=DEVICE)(skip)
         output = self.ff(output) + skip
 
@@ -87,17 +88,20 @@ class Encoder(nn.Module):
 
 
 class ViT(nn.Module):
-    def __init__(self, num_encoders=8, len_embedding=49 * 12, num_heads=12, patch_size=4, input_length=49, num_classes=10):
+    def __init__(self, num_encoders=5, len_embedding=128, num_heads=8, patch_size=4, input_res=28, num_classes=10):
         super(ViT, self).__init__()
+
+        patches_per_dim = (input_res // patch_size) * (input_res // patch_size)
+
         self.num_encoders = num_encoders
-        self.positional_embedding = nn.Embedding(input_length + 1, len_embedding)
+        self.positional_embedding = nn.Embedding(patches_per_dim + 1, len_embedding)
         self.cls_token = nn.Parameter(torch.rand(1, len_embedding))
         self.convolution_embedding = nn.Conv2d(in_channels=1, out_channels=len_embedding, kernel_size=patch_size, stride=patch_size)
         self.classification_head = nn.Linear(len_embedding, num_classes, bias=False)
 
         self.stack_of_encoders = nn.ModuleList()
         for i in range(num_encoders):
-            self.stack_of_encoders.append(Encoder(input_length + 1, len_embedding, num_heads))
+            self.stack_of_encoders.append(Encoder(patches_per_dim + 1, len_embedding, num_heads))
 
     def forward(self, x):
         y_ = self.convolution_embedding(x)
@@ -113,25 +117,24 @@ class ViT(nn.Module):
             y_ = encoder(y_)
 
         y_ = self.classification_head(y_[:, 0, :])
-        y_ = nn.Softmax(dim=1)(y_)
-
         return y_
 
 
 # measures accuracy of predictions at the end of an epoch (bad for semantic segmentation)
 def accuracy(model, loader):
     correct = 0
-    total = len(loader)
 
     with torch.no_grad():
-        for data, label in loader:
-            pred = model(data.to(DEVICE))
-            pred = torch.argmax(pred, dim=1)
+        for i, (x, y) in enumerate(loader):
+            if i > BATCHES_PER_EPOCH:
+                break
+            y_ = model(x.to(DEVICE))
+            y_ = torch.argmax(y_, dim=1)
 
-            correct += (pred == label.to(DEVICE))
-            total += torch.numel(pred)
+            correct += (y_ == y.to(DEVICE))
+            i += 1
 
-    return correct / total
+    return correct / BATCHES_PER_EPOCH)
 
 
 # a training loop that runs a number of training epochs on a model
@@ -140,9 +143,12 @@ def train(model, loss_function, optimizer, train_loader, validation_loader):
         model.train()
         progress = tqdm(train_loader)
 
-        for batch, (data, seg) in enumerate(progress):
-            pred = model(data.to(DEVICE))
-            loss = loss_function(pred, seg.to(DEVICE))
+        for i, (x, y) in enumerate(progress):
+            if i > BATCHES_PER_EPOCH:
+                break
+
+            y_ = model(x.to(DEVICE))
+            loss = loss_function(y_, y.to(DEVICE))
 
             # make the progress bar display loss
             progress.set_postfix(loss=loss.item())
@@ -199,35 +205,9 @@ if __name__ == "__main__":
     # # print(x.size)
     # plt.imshow(x)
     # plt.show()
-    # # print(y)
-
-    '''x, y = train_dataset[0]
-    x = torch.tensor(np.asarray(x)).float().to(DEVICE).unsqueeze(dim=0)
-    y = torch.tensor(np.asarray(y)).float().to(DEVICE)
-    print("y = " + str(y))
+    # print(y)
 
     model = ViT().to(DEVICE)
     loss_function = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
-
-    print("init y_ = " + str(model(x)))
-
-    for i in range(20):
-        pred = model(x)
-        loss = loss_function(pred, y.long().unsqueeze(0))
-        print("i = " + str(i) + ", loss = " + str(loss))
-
-        optimizer.zero_grad()  # zeros out the gradients from previous batch
-        loss.backward()
-        optimizer.step()
-
-    pred = model(x)
-    print("final y_ = " + str(pred))
-    loss = loss_function(pred, y.long().unsqueeze(0))
-    print("final, loss = " + str(loss))'''
-
-    model = ViT().to(DEVICE)
-    loss_function = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.00005)
-
     train(model, loss_function, optimizer, train_loader, validation_loader)
