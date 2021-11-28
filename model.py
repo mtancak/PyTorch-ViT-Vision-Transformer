@@ -13,6 +13,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 1
 NUMBER_OF_EPOCHS = 20
 BATCHES_PER_EPOCH = 100
+LOAD_MODEL_LOC = None
 SAVE_MODEL_LOC = "./model_"
 
 
@@ -163,7 +164,8 @@ def train(model, loss_function, optimizer, train_loader, validation_loader):
         print("Test Accuracy for epoch (" + str(epoch) + ") is: " + str(accuracy(model, validation_loader)))
         print("Train Accuracy for epoch (" + str(epoch) + ") is: " + str(accuracy(model, train_loader)))
 
-        torch.save(model.state_dict(), SAVE_MODEL_LOC + str(epoch))
+        if SAVE_MODEL_LOC:
+            torch.save(model.state_dict(), SAVE_MODEL_LOC + str(epoch))
 
 
 if __name__ == "__main__":
@@ -208,6 +210,9 @@ if __name__ == "__main__":
     # print(y)
 
     model = ViT().to(DEVICE)
+    if LOAD_MODEL_LOC:
+        model.load_state_dict(torch.load(LOAD_MODEL_LOC))
+
     loss_function = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
     train(model, loss_function, optimizer, train_loader, validation_loader)
