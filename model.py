@@ -134,7 +134,7 @@ def accuracy(model, loader):
             correct += (y_ == y.to(DEVICE))
             i += 1
 
-    return correct / BATCHES_PER_EPOCH)
+    return (correct / BATCHES_PER_EPOCH).item()
 
 
 # a training loop that runs a number of training epochs on a model
