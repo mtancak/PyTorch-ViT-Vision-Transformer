@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sn
 from tqdm import tqdm
 
 import torch
@@ -8,15 +9,15 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 import torchvision
 
-
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 1
 NUMBER_OF_EPOCHS = 20
-BATCHES_PER_EPOCH = 100
+BATCHES_PER_EPOCH = 10
 LOAD_MODEL_LOC = None
 SAVE_MODEL_LOC = "./model_"
 PRINT = True
 PRINT_GRAPH = True
+PRINT_CM = True
 
 
 class MHA(nn.Module):
@@ -119,10 +120,10 @@ class ViT(nn.Module):
         y_ = torch.cat((self.cls_token, y_.squeeze()))
         for e in range(len(y_)):
             y_[e] = y_[e] + self.positional_embedding.weight[e]
-        
+
         y_ = y_.T.unsqueeze(dim=0)
         y_ = y_.swapaxes(1, 2)
-        
+
         for encoder in self.stack_of_encoders:
             y_ = encoder(y_)
 
@@ -131,8 +132,9 @@ class ViT(nn.Module):
 
 
 # measures accuracy of predictions at the end of an epoch (bad for semantic segmentation)
-def accuracy(model, loader):
+def accuracy(model, loader, num_classes=10):
     correct = 0
+    cm = np.zeros((num_classes, num_classes))
 
     with torch.no_grad():
         for i, (x, y) in enumerate(loader):
@@ -142,7 +144,22 @@ def accuracy(model, loader):
             y_ = torch.argmax(y_, dim=1)
 
             correct += (y_ == y.to(DEVICE))
-            i += 1
+            cm[y][y_] += 1
+
+    if PRINT_CM:
+        print(cm)
+        class_labels = list(range(num_classes))
+        ax = sn.heatmap(
+            cm,
+            annot=True,
+            cbar=False,
+            xticklabels=class_labels,
+            yticklabels=class_labels)
+        ax.set(
+            xlabel="prediction",
+            ylabel="truth",
+            title="Confusion Matrix for " + ("Training set" if loader.dataset.train else "Validation dataset"))
+        plt.show()
 
     return (correct / BATCHES_PER_EPOCH).item() * 100
 
@@ -232,7 +249,7 @@ if __name__ == "__main__":
         batch_size=1,
         num_workers=0,
         shuffle=False)
-    
+
     # x, y = train_dataset[0]
     # # print(x.size)
     # plt.imshow(x)
