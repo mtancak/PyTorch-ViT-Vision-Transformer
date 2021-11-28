@@ -5,6 +5,6 @@ PyTorch implementation of the Visual Transformer architecture using this paper: 
 *To-do:* display attention as images
 
 ## Results on MNIST with a shallow network and a very small number of batches per epoch due to lack of resources.
-![](Images/accuracy.png)
-![](Images/cm_train.png)
-![](Images/cm_val.png)
+![](images/accuracy.png)
+![](images/cm_train.png)
+![](images/cm_val.png)
